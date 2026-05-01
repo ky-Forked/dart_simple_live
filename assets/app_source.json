@@ -1,0 +1,38 @@
+{
+  "name": "Simple Live Source",
+  "iconURL": "https://raw.githubusercontent.com/xiaoyaocz/dart_simple_live/master/assets/logo.png",
+  "website": "https://github.com/xiaoyaocz/dart_simple_live",
+  "tintColor": "#21a8ec",
+  "featuredApps": [
+    "com.xycz.simple_live"
+  ],
+  "apps": [
+    {
+      "name": "Simple Live",
+      "bundleIdentifier": "com.xycz.simple_live",
+      "developerName": "xiaoyaocz",
+      "subtitle": "简简单单的看直播",
+      "localizedDescription": "简简单单的看直播",
+      "iconURL": "https://raw.githubusercontent.com/xiaoyaocz/dart_simple_live/master/assets/logo.png",
+      "tintColor": "#21a8ec",
+      "category": "entertainment",
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {}
+      },
+      "versions": [
+        {
+          "version": "nightly",
+          "date": "2077-00-00T00:00:00Z",
+          "subtitle": "简简单单的看直播",
+          "localizedDescription": "简简单单的看直播",
+          "downloadURL": "https://github.com/ky-Forked/dart_simple_live/releases/download/nightly/simple-live-ios.ipa",
+          "size": 19166603,
+          "buildVersion": "nightly",
+          "minOSVersion": "14.0"
+        }
+      ]
+    }
+  ],
+  "news": []
+}

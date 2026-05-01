@@ -14,6 +14,14 @@
 
 ![深色模式](/assets/screenshot_dark.jpg)
 
+## 新增订阅源（nightly build）
+
+AltStore、[SideStore](https://sidestore.io/)、[LiveContainer](https://github.com/LiveContainer/LiveContainer) 源：
+
+```
+https://raw.githubusercontent.com/ky-Forked/dart_simple_live/master/assets/app_source.json
+```
+
 ## 支持直播平台：
 
 - 虎牙直播
