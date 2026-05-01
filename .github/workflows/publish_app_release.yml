@@ -54,11 +54,52 @@ jobs:
           cd simple_live_app
           flutter pub get
 
+      # 获取版本信息（从 pubspec.yaml 提取）
+      - name: Get version from pubspec.yaml
+        id: version
+        shell: bash
+        run: |
+          app_version=$(awk '/^version:[[:space:]]*/ { print $2; exit }' simple_live_app/pubspec.yaml)
+          if [ -z "$app_version" ]; then
+            echo "Failed to read version from simple_live_app/pubspec.yaml" >&2
+            exit 1
+          fi
+          echo "VERSION=$app_version" >> "$GITHUB_OUTPUT"
+      - name: Echo version
+        run: echo "${{ steps.version.outputs.VERSION }}"
+
       # 打包APK
       - name: Build APK
         run: |
           cd simple_live_app
           flutter build apk --release --split-per-abi
+
+      # 给APK文件名加上pubspec.yaml中的version字段
+      - name: Add pubspec version to APK filenames
+        shell: bash
+        run: |
+          app_version="${{ steps.version.outputs.VERSION }}"
+
+          found=0
+          while IFS= read -r -d '' file; do
+            found=1
+            dir=$(dirname "$file")
+            name=$(basename "$file")
+            base="${name%.*}"
+            ext="${name##*.}"
+            if [[ "$base" == *"$app_version"* ]]; then
+              echo "Skip $file (already contains version)"
+              continue
+            fi
+            target="$dir/${base}-${app_version}.${ext}"
+            echo "Rename $file -> $target"
+            mv "$file" "$target"
+          done < <(find simple_live_app/build/app/outputs/flutter-apk -maxdepth 1 -type f -name '*.apk' -print0)
+
+          if [ "$found" -eq 0 ]; then
+            echo "No APK files found" >&2
+            exit 1
+          fi
 
       # 上传APK至Artifacts
       - name: Upload APK to Artifacts
@@ -66,31 +107,19 @@ jobs:
         with:
           name: android
           path: |
-            simple_live_app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            simple_live_app/build/app/outputs/flutter-apk/app-x86_64-release.apk
-
-      # 获取版本信息（自动从 Git Tag 提取）
-      - name: Get version from tag
-        if: startsWith(github.ref, 'refs/tags/')
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-      - name: Echo version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: echo "${{ steps.version.outputs.VERSION }}"
+            simple_live_app/build/app/outputs/flutter-apk/*.apk
 
       # 上传至Release
       - name: Upload Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: "${{ steps.version.outputs.VERSION }}"
           name: "${{ steps.version.outputs.VERSION }}"
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
+          overwrite: true
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') }}
           files: |
-            simple_live_app/build/app/outputs/flutter-apk/app-x86_64-release.apk
-            simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            simple_live_app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            simple_live_app/build/app/outputs/flutter-apk/*.apk
 
       # 完成
       - run: echo "🤖 Android job's status is ${{ job.status }}."
@@ -120,6 +149,20 @@ jobs:
           cd simple_live_app
           flutter pub get
 
+      # 获取版本信息（从 pubspec.yaml 提取）
+      - name: Get version from pubspec.yaml
+        id: version
+        shell: bash
+        run: |
+          app_version=$(awk '/^version:[[:space:]]*/ { print $2; exit }' simple_live_app/pubspec.yaml)
+          if [ -z "$app_version" ]; then
+            echo "Failed to read version from simple_live_app/pubspec.yaml" >&2
+            exit 1
+          fi
+          echo "VERSION=$app_version" >> "$GITHUB_OUTPUT"
+      - name: Echo version
+        run: echo "${{ steps.version.outputs.VERSION }}"
+
       # 打包iOS
       - name: Build IPA
         run: |
@@ -133,8 +176,35 @@ jobs:
           mkdir build/ios/iphoneos/Payload
           cp -R build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/Runner.app
           cd build/ios/iphoneos/
-          zip -q -r ios_no_sign.ipa Payload
+          zip -q -r simple_live_app.ipa Payload
           cd ../../..
+
+      # 给IPA文件名加上pubspec.yaml中的version字段
+      - name: Add pubspec version to IPA filenames
+        shell: bash
+        run: |
+          app_version="${{ steps.version.outputs.VERSION }}"
+
+          found=0
+          while IFS= read -r -d '' file; do
+            found=1
+            dir=$(dirname "$file")
+            name=$(basename "$file")
+            base="${name%.*}"
+            ext="${name##*.}"
+            if [[ "$base" == *"$app_version"* ]]; then
+              echo "Skip $file (already contains version)"
+              continue
+            fi
+            target="$dir/${base}-${app_version}.${ext}"
+            echo "Rename $file -> $target"
+            mv "$file" "$target"
+          done < <(find simple_live_app/build/ios/iphoneos -maxdepth 1 -type f -name '*.ipa' -print0)
+
+          if [ "$found" -eq 0 ]; then
+            echo "No IPA files found" >&2
+            exit 1
+          fi
 
       # 上传IPA至Artifacts
       - name: Upload IPA to Artifacts
@@ -142,27 +212,19 @@ jobs:
         with:
           name: ios
           path: |
-            simple_live_app/build/ios/iphoneos/ios_no_sign.ipa
-
-      # 获取版本信息（自动从 Git Tag 提取）
-      - name: Get version from tag
-        if: startsWith(github.ref, 'refs/tags/')
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-      - name: Echo version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: echo "${{ steps.version.outputs.VERSION }}"
+            simple_live_app/build/ios/iphoneos/*.ipa
 
       # 上传至Release
       - name: Upload Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: "${{ steps.version.outputs.VERSION }}"
           name: "${{ steps.version.outputs.VERSION }}"
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
+          overwrite: true
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') }}
           files: |
-            simple_live_app/build/ios/iphoneos/ios_no_sign.ipa
+            simple_live_app/build/ios/iphoneos/*.ipa
 
       # 完成
       - run: echo "🍏 iOS job's status is ${{ job.status }}."
@@ -196,6 +258,20 @@ jobs:
           cd simple_live_app
           flutter pub get
 
+      # 获取版本信息（从 pubspec.yaml 提取）
+      - name: Get version from pubspec.yaml
+        id: version
+        shell: bash
+        run: |
+          app_version=$(awk '/^version:[[:space:]]*/ { print $2; exit }' simple_live_app/pubspec.yaml)
+          if [ -z "$app_version" ]; then
+            echo "Failed to read version from simple_live_app/pubspec.yaml" >&2
+            exit 1
+          fi
+          echo "VERSION=$app_version" >> "$GITHUB_OUTPUT"
+      - name: Echo version
+        run: echo "${{ steps.version.outputs.VERSION }}"
+
       # 安装appdmg npm install -g appdmg
       - name: Install appdmg
         run: npm install -g appdmg
@@ -210,6 +286,33 @@ jobs:
           cd simple_live_app
           flutter_distributor package --platform macos --targets dmg,zip --skip-clean
 
+      # 给MacOS打包文件名加上pubspec.yaml中的version字段
+      - name: Add pubspec version to MacOS package filenames
+        shell: bash
+        run: |
+          app_version="${{ steps.version.outputs.VERSION }}"
+
+          found=0
+          while IFS= read -r -d '' file; do
+            found=1
+            dir=$(dirname "$file")
+            name=$(basename "$file")
+            base="${name%.*}"
+            ext="${name##*.}"
+            if [[ "$base" == *"$app_version"* ]]; then
+              echo "Skip $file (already contains version)"
+              continue
+            fi
+            target="$dir/${base}-${app_version}.${ext}"
+            echo "Rename $file -> $target"
+            mv "$file" "$target"
+          done < <(find simple_live_app/build/dist -type f \( -name '*.dmg' -o -name '*.zip' \) -print0)
+
+          if [ "$found" -eq 0 ]; then
+            echo "No MacOS package files found" >&2
+            exit 1
+          fi
+
       # 上传MacOS至Artifacts
       - name: Upload MacOS to Artifacts
         uses: actions/upload-artifact@v4
@@ -219,23 +322,15 @@ jobs:
             simple_live_app/build/dist/*/*.dmg
             simple_live_app/build/dist/*/*.zip
 
-      # 获取版本信息（自动从 Git Tag 提取）
-      - name: Get version from tag
-        if: startsWith(github.ref, 'refs/tags/')
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-      - name: Echo version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: echo "${{ steps.version.outputs.VERSION }}"
-
       # 上传至Release
       - name: Upload Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: "${{ steps.version.outputs.VERSION }}"
           name: "${{ steps.version.outputs.VERSION }}"
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
+          overwrite: true
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') }}
           files: |
             simple_live_app/build/dist/*/*.dmg
             simple_live_app/build/dist/*/*.zip
@@ -272,6 +367,19 @@ jobs:
         run: |
           cd simple_live_app
           flutter pub get
+      # 获取版本信息（从 pubspec.yaml 提取）
+      - name: Get version from pubspec.yaml
+        id: version
+        shell: bash
+        run: |
+          app_version=$(awk '/^version:[[:space:]]*/ { print $2; exit }' simple_live_app/pubspec.yaml)
+          if [ -z "$app_version" ]; then
+            echo "Failed to read version from simple_live_app/pubspec.yaml" >&2
+            exit 1
+          fi
+          echo "VERSION=$app_version" >> "$GITHUB_OUTPUT"
+      - name: Echo version
+        run: echo "${{ steps.version.outputs.VERSION }}"
       # 设置flutter_distributor环境
       - name: Install flutter_distributor
         run: dart pub global activate flutter_distributor
@@ -280,6 +388,33 @@ jobs:
         run: |
           cd simple_live_app
           flutter_distributor package --platform linux --targets deb,zip --skip-clean
+
+      # 给Linux打包文件名加上pubspec.yaml中的version字段
+      - name: Add pubspec version to Linux package filenames
+        shell: bash
+        run: |
+          app_version="${{ steps.version.outputs.VERSION }}"
+
+          found=0
+          while IFS= read -r -d '' file; do
+            found=1
+            dir=$(dirname "$file")
+            name=$(basename "$file")
+            base="${name%.*}"
+            ext="${name##*.}"
+            if [[ "$base" == *"$app_version"* ]]; then
+              echo "Skip $file (already contains version)"
+              continue
+            fi
+            target="$dir/${base}-${app_version}.${ext}"
+            echo "Rename $file -> $target"
+            mv "$file" "$target"
+          done < <(find simple_live_app/build/dist -type f \( -name '*.deb' -o -name '*.zip' \) -print0)
+
+          if [ "$found" -eq 0 ]; then
+            echo "No Linux package files found" >&2
+            exit 1
+          fi
       # 上传Linux包至Artifacts
       - name: Upload Linux APP to Artifacts
         uses: actions/upload-artifact@v4
@@ -289,23 +424,15 @@ jobs:
             simple_live_app/build/dist/*/*.deb
             simple_live_app/build/dist/*/*.zip
 
-      #获取版本信息（自动从 Git Tag 提取）
-      - name: Get version from tag
-        if: startsWith(github.ref, 'refs/tags/')
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-      - name: Echo version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: echo "${{ steps.version.outputs.VERSION }}"
-
       #上传至Release
       - name: Upload Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: "${{ steps.version.outputs.VERSION }}"
           name: "${{ steps.version.outputs.VERSION }}"
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
+          overwrite: true
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') }}
           files: |
             simple_live_app/build/dist/*/*.deb
             simple_live_app/build/dist/*/*.zip
@@ -334,6 +461,19 @@ jobs:
         run: |
           cd simple_live_app
           flutter pub get
+      # 获取版本信息（从 pubspec.yaml 提取）
+      - name: Get version from pubspec.yaml
+        id: version
+        shell: bash
+        run: |
+          app_version=$(awk '/^version:[[:space:]]*/ { print $2; exit }' simple_live_app/pubspec.yaml)
+          if [ -z "$app_version" ]; then
+            echo "Failed to read version from simple_live_app/pubspec.yaml" >&2
+            exit 1
+          fi
+          echo "VERSION=$app_version" >> "$GITHUB_OUTPUT"
+      - name: Echo version
+        run: echo "${{ steps.version.outputs.VERSION }}"
       # 设置flutter_distributor环境
       - name: Install flutter_distributor
         run: dart pub global activate flutter_distributor
@@ -342,6 +482,33 @@ jobs:
         run: |
           cd simple_live_app
           flutter_distributor package --platform windows --targets msix,zip --skip-clean
+
+      # 给Windows打包文件名加上pubspec.yaml中的version字段
+      - name: Add pubspec version to Windows package filenames
+        shell: bash
+        run: |
+          app_version="${{ steps.version.outputs.VERSION }}"
+
+          found=0
+          while IFS= read -r -d '' file; do
+            found=1
+            dir=$(dirname "$file")
+            name=$(basename "$file")
+            base="${name%.*}"
+            ext="${name##*.}"
+            if [[ "$base" == *"$app_version"* ]]; then
+              echo "Skip $file (already contains version)"
+              continue
+            fi
+            target="$dir/${base}-${app_version}.${ext}"
+            echo "Rename $file -> $target"
+            mv "$file" "$target"
+          done < <(find simple_live_app/build/dist -type f \( -name '*.msix' -o -name '*.zip' \) -print0)
+
+          if [ "$found" -eq 0 ]; then
+            echo "No Windows package files found" >&2
+            exit 1
+          fi
 
       # 上传Windows至Artifacts
       - name: Upload Windows APP to Artifacts
@@ -352,24 +519,15 @@ jobs:
             simple_live_app/build/dist/*/*.msix
             simple_live_app/build/dist/*/*.zip
 
-      #获取版本信息（自动从 Git Tag 提取）
-      - name: Get version from tag
-        if: startsWith(github.ref, 'refs/tags/')
-        id: version
-        shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-      - name: Echo version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: echo "${{ steps.version.outputs.VERSION }}"
-
       #上传至Release
       - name: Upload Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: "${{ steps.version.outputs.VERSION }}"
           name: "${{ steps.version.outputs.VERSION }}"
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
+          overwrite: true
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') }}
           files: |
             simple_live_app/build/dist/*/*.msix
             simple_live_app/build/dist/*/*.zip
